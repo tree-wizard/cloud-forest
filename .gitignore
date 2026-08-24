@@ -1,0 +1,43 @@
+# Secrets — never commit
+challenge_docs/claude-token.txt
+.claude/settings.local.json
+.claude/anthropic-key.sh
+.env
+.env.*
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# aisec runtime artifacts
+.aisec_cache/
+*.sqlite3
+*.db
+target/*.db
+evals/**/*.actual.yaml
+evals/RESULTS_scratch.md
+*.log
