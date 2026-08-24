@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from conftest import callback_paths, callback_server
@@ -13,22 +15,11 @@ NONCE = "aisec-nonce-4f19c2"
 
 
 def _preview(client, headers, path, url):
+    body = json.dumps({"url": url})
     response = client.post(path, headers=headers, json={"url": url})
-    observation = HttpObservation.from_flask(
-        response, sent_as="alice", method="POST", path=path
-    )
-    # The request payload is part of the record; body_text holds the response,
-    # so the sent URL is carried on `url` the way the tool layer will do it.
-    return HttpObservation(
-        method=observation.method,
-        url=f"{path} body={url}",
-        path=observation.path,
-        query="",
-        sent_as=observation.sent_as,
-        status=observation.status,
-        headers=observation.headers,
-        body_text=observation.body_text,
-        json=observation.json,
+    # `request_body` carries the sent payload, the way the tool layer records it.
+    return HttpObservation.from_flask(
+        response, sent_as="alice", method="POST", path=path, request_body=body
     )
 
 
@@ -92,14 +83,37 @@ def test_oracle_stays_silent_when_the_hit_is_not_attributable_to_the_target():
 def test_oracle_stays_silent_when_no_hit_carries_the_nonce():
     sent = HttpObservation(
         method="POST",
-        url=f"/api/imports/preview body=http://127.0.0.1:9/probe/{NONCE}",
+        url="/api/imports/preview",
         path="/api/imports/preview",
         sent_as="alice",
         status=502,
+        request_body=json.dumps({"url": f"http://127.0.0.1:9/probe/{NONCE}"}),
     )
     for hits in ([], [CallbackHit(path="/probe/other", nonce="other")]):
         ctx = OracleContext(callback_hits=hits, callback_nonce=NONCE)
         assert check_ssrf([sent], ctx).violated is False
+
+
+def test_oracle_stays_silent_when_the_nonce_only_appears_in_a_response_body():
+    # Attribution reads the request side only. A target that echoes the nonce
+    # back has not been made to fetch anything, so the echo must not stand in
+    # for a target-directed request.
+    echoed = HttpObservation(
+        method="GET",
+        url="/api/notes/1001",
+        path="/api/notes/1001",
+        sent_as="alice",
+        status=200,
+        request_body="",
+        body_text=f'{{"body": "{NONCE}"}}',
+        json={"body": NONCE},
+    )
+    ctx = OracleContext(
+        callback_hits=[CallbackHit(path=f"/probe/{NONCE}", nonce=NONCE)],
+        callback_nonce=NONCE,
+    )
+
+    assert check_ssrf([echoed], ctx).violated is False
 
 
 def test_oracle_refuses_to_run_without_a_nonce():
