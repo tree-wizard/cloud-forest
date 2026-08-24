@@ -42,15 +42,15 @@ We want to make Claude operate a tiny security lab
 
 # Test Application:
 ```
-target/
+notes-app/
 ├── app.py
 ├── auth.py
 ├── database.py
 ├── routes/
-│   ├── documents.py
-│   ├── users.py
-│   └── fetch.py
-└── Dockerfile
+    ├── documents.py
+    ├── users.py
+    └── fetch.py
+
 ```
 Cross-tenant IDOR
 Path traversal

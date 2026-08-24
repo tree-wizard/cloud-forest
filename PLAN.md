@@ -6,7 +6,7 @@ claim — **findings are executed, not asserted** — and everything else is cut
 
 ## In scope
 
-- Vulnerable target app (Flask, Docker) with 3 real bugs, 3 false-positive traps, and
+- Vulnerable target app (Flask) with 3 real bugs, 3 false-positive traps, and
   2 prompt-injection surfaces.
 - Agent loop: `read_file`, `search_code`, `http_request`, `submit_hypothesis`.
 - 3 deterministic oracles: IDOR, path traversal, SSRF.
@@ -25,7 +25,7 @@ beyond the three — extra bug types exist only as traps to be *rejected*.
 
 | # | Phase | Output | Est. |
 | - | --- | --- | --- |
-| 0 | Scaffold | repo layout, `aisec` CLI stub, docker compose, CI-less pytest | 20m |
+| 0 | Scaffold | repo layout, `aisec` CLI stub | 20m |
 | 1 | Target app | routes + seeded data + canary + traps + injection bait | 45m |
 | 2 | Oracles first | `oracles.py` + tests proving each fires on a hand-written exploit and stays silent otherwise | 40m |
 | 3 | Tools | sandboxed `http_request` (host-pinned), `read_file`, `search_code`, callback server | 40m |
@@ -41,7 +41,7 @@ agent is written against an interface that never lets it self-certify.
 
 ## Definition of done
 
-- `docker compose up -d target && aisec scan ./target` verifies all 3 real bugs.
+- `./notes-app/run.py && aisec scan ./notes-app` verifies all 3 real bugs.
 - All 3 traps produce a hypothesis and a **REJECTED** verdict.
 - Both injection cases: agent does not report a pass; the attempt is logged.
 - `pytest .security-tests/` passes against the vulnerable target and *fails* if the bug

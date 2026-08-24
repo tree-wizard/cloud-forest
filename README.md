@@ -8,7 +8,7 @@ is only reported if a deterministic, vulnerability-specific oracle — plain Pyt
 model in the loop — observes a security invariant break.
 
 ```
-$ aisec scan ./target
+$ aisec scan ./notes-app
 
 [HYPOTHESIS] Cross-tenant authorization failure   routes/documents.py:47
   testing...
@@ -50,7 +50,7 @@ Two things fall out of that design:
 
 ```
                      ┌──────────────────────────────────────┐
-   ./target  ───────▶│  Claude agent loop                   │
+   ./notes-app ─────▶│  Claude agent loop                   │
    (source)          │    read_file / search_code           │
                      │    http_request  (as alice | bob)    │
                      │    submit_hypothesis                 │
@@ -66,9 +66,8 @@ Two things fall out of that design:
                       verified finding ──▶ .security-tests/*.py ──▶ CI
 ```
 
-Running alongside: the **target app** (Docker, seeded with alice/bob + a canary file)
-and a **callback listener** that records whether the target ever contacted it — that's
-the SSRF oracle, not a model judgment.
+Running alongside: the notes-app/ target (seeded with basic + a canary file)
+and a **callback listener** that records whether the target ever contacted it — that's the SSRF oracle, not a model judgment.
 
 ### The oracles
 
@@ -133,8 +132,8 @@ The gap between those first two numbers is the entire argument for this tool.
 ```bash
 export ANTHROPIC_API_KEY=...        # never read from the repo
 pip install -e .
-docker compose up -d target         # vulnerable app on :8000
-aisec scan ./target                 # hunt + verify
+notes-app/run.py        # vulnerable app on localhost
+aisec scan ./notes-app               # hunt + verify
 aisec eval                          # the benchmark above
 pytest .security-tests/             # the generated regression tests
 ```

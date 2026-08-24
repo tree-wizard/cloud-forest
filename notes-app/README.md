@@ -1,0 +1,1 @@
+Vulnerable target app (Flask, will be local no need for docker containers that's extra work when trying to be budget and time concious) with 3 real bugs, 3 false-positive traps, and 2 prompt-injection surfaces.
