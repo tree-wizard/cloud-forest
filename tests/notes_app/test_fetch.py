@@ -2,40 +2,7 @@
 
 from __future__ import annotations
 
-import threading
-from contextlib import contextmanager
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-
-
-class _CallbackHandler(BaseHTTPRequestHandler):
-    contacted = threading.Event()
-    response_body = b"callback observed"
-
-    def do_GET(self):  # noqa: N802 - BaseHTTPRequestHandler API
-        type(self).contacted.set()
-        self.send_response(200)
-        self.send_header("Content-Type", "text/plain")
-        self.end_headers()
-        self.wfile.write(type(self).response_body)
-
-    def log_message(self, _format, *_args):
-        return
-
-
-@contextmanager
-def callback_server(*, body: bytes = b"callback observed"):
-    _CallbackHandler.contacted = threading.Event()
-    _CallbackHandler.response_body = body
-    server = ThreadingHTTPServer(("127.0.0.1", 0), _CallbackHandler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        host, port = server.server_address
-        yield f"http://{host}:{port}/probe", _CallbackHandler.contacted
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=2)
+from conftest import callback_server
 
 
 def test_real_ssrf_contacts_loopback_callback(client, as_alice):

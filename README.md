@@ -76,12 +76,28 @@ The whole design rests on these being boring and checkable:
 
 | Class | Invariant the oracle asserts |
 | --- | --- |
-| IDOR | `response.owner_id == requesting_user_id` |
-| Path traversal | `SECRET_CANARY not in response.text` |
-| SSRF | `callback_server.was_contacted() is False` |
+| IDOR | no 2xx body carries an `owner_id` other than the identity we sent as |
+| Path traversal | `SECRET_CANARY not in response.text` of any sub-400 response |
+| SSRF | no callback hit carries the nonce a *target-directed* request planted |
 
 Three classes, chosen because each has an unambiguous runtime signal. Not
 Burp + CodeQL + Semgrep. Three that work.
+
+#### How an oracle stays honest
+
+- **Fail closed.** Ambiguity — a non-2xx response, an unparseable body, an identity the
+  tool layer couldn't attribute, an empty trace — resolves to HELD. A bug we can't
+  demonstrate is not a finding.
+- **The canary is never empty.** `"" in text` is vacuously true, so an unset canary would
+  "verify" every response. The oracle raises instead. Small, but it's exactly the class of
+  footgun that turns a precision claim into a lie.
+- **The nonce ties the callback to the target.** A callback hit only counts if a request
+  *we sent to the target* carried the same nonce — otherwise the agent could contact its
+  own listener and call it SSRF.
+
+Each oracle ships with proof it fires on a hand-written exploit against the running target
+and stays silent on the trap that merely looks like one. The check that matters: patch the
+bug in the target and the "fires" test must fail. It does, for all three.
 
 ### Everything the agent reads is untrusted
 
@@ -153,12 +169,17 @@ local callback server, so it can't be talked into reaching the internet.
   defend in a review.
 - *Real running target, not static analysis.* "Demonstrably exploitable" requires
   execution. This is the point of the project.
+- *Oracles receive observations only — never the hypothesis.* Model-authored text has no
+  path to a verdict even by accident, and a signature-guard test asserts it structurally
+  rather than trusting the convention to hold.
 
 **Rejected**
 - Model-as-judge verdicts (the failure mode this tool exists to fix).
 - Mass assignment / privilege escalation / SQLi as *verified* classes — kept as
   false-positive traps instead, since their oracles are murkier and the budget is hours.
 - A generic "scan any repo" promise. It works on the shipped target; honest scope.
+- Treating a canary echoed in a 4xx/5xx error body as traversal. Arguably a real leak, but
+  an error page isn't a successful file read — and precision is the whole claim.
 
 **Where the AI led me astray**
 > *(to be filled with the real incident — the plan is to keep the first failure rather
