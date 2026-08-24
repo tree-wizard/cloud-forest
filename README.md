@@ -66,8 +66,9 @@ Two things fall out of that design:
                       verified finding ──▶ .security-tests/*.py ──▶ CI
 ```
 
-Running alongside: the notes-app/ target (seeded with basic + a canary file)
-and a **callback listener** that records whether the target ever contacted it — that's the SSRF oracle, not a model judgment.
+Running alongside: the `notes-app/` target (seeded with Alice, Bob, synthetic notes,
+and a canary file) and a **callback listener** that records whether the target ever
+contacted it — that's the SSRF oracle, not a model judgment.
 
 ### The oracles
 
@@ -132,8 +133,8 @@ The gap between those first two numbers is the entire argument for this tool.
 ```bash
 export ANTHROPIC_API_KEY=...        # never read from the repo
 pip install -e .
-notes-app/run.py        # vulnerable app on localhost
-aisec scan ./notes-app               # hunt + verify
+./notes-app/run.py                  # vulnerable app on localhost
+aisec scan ./notes-app              # hunt + verify
 aisec eval                          # the benchmark above
 pytest .security-tests/             # the generated regression tests
 ```

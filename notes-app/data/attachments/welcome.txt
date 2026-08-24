@@ -1,0 +1,3 @@
+Welcome to the synthetic notes application.
+
+This file contains no confidential or production data.

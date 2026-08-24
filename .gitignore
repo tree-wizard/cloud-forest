@@ -38,6 +38,7 @@ env/
 *.sqlite3
 *.db
 target/*.db
+notes-app/instance/
 evals/**/*.actual.yaml
 evals/RESULTS_scratch.md
 *.log

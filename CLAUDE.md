@@ -41,7 +41,7 @@ aisec/            agent + CLI
   oracles.py      deterministic verdicts — the trust boundary
   router.py       model routing + sha256 analysis cache + cost meter
   emit.py         verified finding -> .security-tests/test_*.py
-notes-app/          deliberately vulnerable Flask app
+notes-app/          deliberately vulnerable Flask app (synthetic data only)
 evals/            true_positive/ false_positive/ adversarial/ + RESULTS.md
 .security-tests/  generated regression tests (committed — they're an artifact)
 challenge_docs/   the brief. Not code.
