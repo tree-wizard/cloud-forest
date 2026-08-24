@@ -47,3 +47,12 @@ def test_attachment_errors_are_controlled(client, as_alice):
         == 404
     )
 
+
+def test_malformed_filenames_are_rejected_without_crashing(client, as_alice):
+    for filename in ("welcome.txt\x00.png", "/etc/passwd", "a" * 6000, "../private"):
+        response = client.get(
+            "/api/attachments/download",
+            query_string={"filename": filename},
+            headers=as_alice,
+        )
+        assert 400 <= response.status_code < 500, filename

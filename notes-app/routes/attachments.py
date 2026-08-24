@@ -21,7 +21,12 @@ def download():
 
     data_root = Path(current_app.config["DATA_ROOT"]).resolve()
     attachments_root = data_root / "attachments"
-    candidate = (attachments_root / filename).resolve()
+
+    # A malformed name is rejected here so it cannot escape the request handler.
+    try:
+        candidate = (attachments_root / filename).resolve()
+    except (OSError, ValueError):
+        return jsonify(error="filename is not a usable path"), 400
 
     # Files outside the synthetic fixture tree must never be readable.
     try:
