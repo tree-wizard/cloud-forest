@@ -156,8 +156,9 @@ pytest .security-tests/             # the generated regression tests
 ```
 
 The API key comes from the environment only. The target app's seeded data is synthetic;
-the canary is a fake secret. The agent's HTTP tool is pinned to the target host and the
-local callback server, so it can't be talked into reaching the internet.
+the canary is a fake secret. The agent's HTTP tool takes a path, never a URL — the target
+host is fixed and a different one is not expressible — so it can't be talked into reaching
+the internet, or into reaching the callback listener itself.
 
 ## Decision & cost log
 
@@ -172,6 +173,16 @@ local callback server, so it can't be talked into reaching the internet.
 - *Oracles receive observations only — never the hypothesis.* Model-authored text has no
   path to a verdict even by accident, and a signature-guard test asserts it structurally
   rather than trusting the convention to hold.
+- *The model cannot choose the identity it sends as, and cannot name a host.* `sent_as` on
+  an observation is a fact about what the tool attached, which is the thing the IDOR oracle
+  trusts; and `http_request` takes a path, so the callback listener is reachable only by
+  the target. Both preconditions are removed capabilities, not filters — the agent can't
+  curl its own listener and call it SSRF because it can't address it at all.
+- *The harness holds the canary; the model has to steal it.* `read_file` denies the private
+  directory, `http_request` refuses to send the canary, and model-facing text is scrubbed —
+  so a traversal verdict can only come from the target actually leaking the file. That
+  check lives in the tool layer on purpose: putting it in the oracle would mean making the
+  oracle stateful enough to tell "read it" from "planted it there first".
 
 **Rejected**
 - Model-as-judge verdicts (the failure mode this tool exists to fix).
@@ -182,9 +193,24 @@ local callback server, so it can't be talked into reaching the internet.
   an error page isn't a successful file read — and precision is the whole claim.
 
 **Where the AI led me astray**
-> *(to be filled with the real incident — the plan is to keep the first failure rather
-> than quietly fix it. Expected shape: the model calling a 403 with sensitive-looking
-> error metadata a successful exploit, which is what motivated deterministic oracles.)*
+
+*Phase 3 — a false positive from scoping half an observation.* The tool layer scopes each
+verification to one attack: `mark()` returns a cursor into the trace, and the oracle only
+sees `trace_since(mark)`. That looked complete, and the first pass shipped it. It isn't.
+The callback log is the *other* half of an SSRF observation, and it was still scan-global.
+So: attack the real SSRF, get a hit on record, then probe the allowlisted-preview trap. The
+trap 400s and never fetches — but its request still carries the nonce, and the previous
+attack's hit is still there. Both of `check_ssrf`'s clauses are satisfied by two unrelated
+events and the trap reports VIOLATED. Caught by driving the traps through the real tools in
+sequence rather than one per fresh sandbox, which is the only ordering that reproduces it.
+`mark()` now clears the callback log as part of opening the window, and
+`test_allowlisted_preview_trap_is_rejected_even_after_the_real_ssrf` runs the two attacks
+in the order that broke it. The lesson generalises past this bug: an oracle reading two
+channels is only as scoped as the *less* scoped one.
+
+> *(the scan-time incident is still to come — expected shape: the model calling a 403 with
+> sensitive-looking error metadata a successful exploit, which is what motivated
+> deterministic oracles in the first place.)*
 
 **The $250**
 > *(actual spend by phase and model, from the run counters, before submission)*

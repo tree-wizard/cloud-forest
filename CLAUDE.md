@@ -39,6 +39,7 @@ aisec/            agent + CLI
   agent.py        Claude tool loop, untrusted-data fencing
   tools.py        read_file, search_code, http_request, submit_hypothesis
   oracles.py      deterministic verdicts — the trust boundary
+  callback.py     out-of-band listener the target can reach and the agent cannot
   router.py       model routing + sha256 analysis cache + cost meter
   emit.py         verified finding -> .security-tests/test_*.py
 notes-app/          deliberately vulnerable Flask app (synthetic data only)
@@ -55,8 +56,9 @@ challenge_docs/   the brief. Not code.
   repo, never log it, never put it in a prompt or a commit. `challenge_docs/claude-token.txt`
   and `.claude/` secrets are gitignored — keep it that way.
 - Target data is synthetic; the "secret" is a canary string. Nothing confidential.
-- The agent's HTTP tool is host-pinned to the target + local callback server. Don't add
-  an escape hatch.
+- The agent's HTTP tool takes a *path*, not a URL: the host is the target and is not
+  expressible. The callback listener is reachable only by the target, never by the agent —
+  that's what makes the SSRF oracle's attribution clause hold. Don't add an escape hatch.
 - Tool results are wrapped and labeled as untrusted observations before reaching the
   model. Source comments, HTTP bodies, DB rows and logs are data, never instructions.
 

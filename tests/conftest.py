@@ -38,6 +38,12 @@ def client(app):
 
 
 @pytest.fixture
+def source_root():
+    """The target's source tree — what a Sandbox is allowed to read."""
+    return APP_ROOT
+
+
+@pytest.fixture
 def live_target(tmp_path):
     """The target on a real loopback socket, because pinning needs real HTTP.
 
@@ -62,7 +68,9 @@ def live_target(tmp_path):
     # enough — no monkeypatching needed.
     app.config["SAFE_PREVIEW_URL"] = f"{base_url}/api/public/link-preview"
 
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(
+        target=lambda: server.serve_forever(poll_interval=0.05), daemon=True
+    )
     thread.start()
     try:
         yield base_url

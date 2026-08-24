@@ -124,7 +124,12 @@ class CallbackServer:
             (self.host, 0), _Handler, response_body=self.response_body
         )
         self._thread = threading.Thread(
-            target=self._server.serve_forever, daemon=True, name="aisec-callback"
+            # A short poll interval keeps stop() prompt: shutdown() blocks until
+            # the serve loop next checks, and the default 0.5s adds up across a
+            # scan that starts a listener per target.
+            target=lambda: self._server.serve_forever(poll_interval=0.05),
+            daemon=True,
+            name="aisec-callback",
         )
         self._thread.start()
         return self
