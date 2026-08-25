@@ -561,6 +561,7 @@ def http_request(
 
     sandbox.request_count += 1
     started = time.monotonic()
+    started_at = time.time()  # comparable with a callback hit's received_at
     try:
         response = client.request(method, url, content=body_bytes, headers=headers)
     except httpx.HTTPError as exc:
@@ -578,6 +579,7 @@ def http_request(
                 body_text="",
                 json=None,
                 elapsed_ms=elapsed,
+                started_at=started_at,
             )
         )
         return ToolResult(
@@ -600,6 +602,7 @@ def http_request(
         query=query_string,
         request_body=request_body,
         elapsed_ms=elapsed,
+        started_at=started_at,
         max_body_bytes=MAX_RECORDED_BODY_BYTES,
     )
     sandbox.trace.append(observation)

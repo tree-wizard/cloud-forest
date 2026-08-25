@@ -35,6 +35,9 @@ class HttpObservation:
     body_text: str = ""
     json: Any = None
     elapsed_ms: float = 0.0
+    # Wall clock, comparable with CallbackHit.received_at. 0.0 means "unknown",
+    # which the SSRF oracle treats as "cannot order these" rather than "before".
+    started_at: float = 0.0
 
     @classmethod
     def from_flask(
@@ -78,6 +81,7 @@ class HttpObservation:
         query: str = "",
         request_body: str = "",
         elapsed_ms: float = 0.0,
+        started_at: float = 0.0,
         max_body_bytes: int | None = None,
     ) -> HttpObservation:
         """Build an observation from an httpx response.
@@ -107,6 +111,7 @@ class HttpObservation:
             body_text=body_text,
             json=parsed,
             elapsed_ms=elapsed_ms,
+            started_at=started_at,
         )
 
 
@@ -270,16 +275,12 @@ def check_ssrf(trace: Sequence[HttpObservation], ctx: OracleContext) -> Verdict:
     # response body has not been made to fetch anything, and scanning responses
     # would let any echo endpoint satisfy this clause. SSRF always puts the
     # nonce on the request side, so the narrowing costs no recall.
-    trigger = next(
-        (
-            o
-            for o in trace
-            if nonce in o.url
-            or nonce in (o.query or "")
-            or nonce in (o.request_body or "")
-        ),
-        None,
-    )
+    candidates = [
+        o
+        for o in trace
+        if nonce in o.url or nonce in (o.query or "") or nonce in (o.request_body or "")
+    ]
+    trigger = _attribute(candidates, hit)
 
     if hit is None or trigger is None:
         return Verdict(
@@ -305,6 +306,36 @@ def check_ssrf(trace: Sequence[HttpObservation], ctx: OracleContext) -> Verdict:
             f"listener at {hit.path}"
         ),
     )
+
+
+def _attribute(
+    candidates: Sequence[HttpObservation], hit: CallbackHit | None
+) -> HttpObservation | None:
+    """Which nonce-carrying request caused this callback hit?
+
+    The verdict does not depend on getting this right — a hit plus any
+    target-directed request carrying the nonce is already a violation. The
+    *evidence* does, and the evidence is what a generated regression test
+    replays and what the eval harness scopes a finding by. A real scan sent two
+    attacks in one window: a userinfo-confusion URL the target rejected with 400,
+    then a plain loopback URL it fetched. Taking the first match credited the
+    400, and the emitted test replayed a request the target refuses.
+
+    So: consider only requests already sent when the listener recorded the hit
+    (an unknown `started_at` is not evidence of order, so it stays a candidate),
+    and prefer the most recent one the target actually answered 2xx. A fetch that
+    happened behind an error status is still possible, hence the fallback.
+    """
+    if not candidates:
+        return None
+    plausible = [
+        o
+        for o in candidates
+        if hit is None or not o.started_at or not hit.received_at
+        or o.started_at <= hit.received_at
+    ] or list(candidates)
+    succeeded = [o for o in plausible if 200 <= o.status < 300]
+    return (succeeded or plausible)[-1]
 
 
 ORACLES: dict[str, Callable[[Sequence[HttpObservation], OracleContext], Verdict]] = {

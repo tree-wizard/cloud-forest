@@ -120,3 +120,81 @@ def test_oracle_refuses_to_run_without_a_nonce():
     for nonce in ("", "   "):
         with pytest.raises(ValueError):
             check_ssrf([], OracleContext(callback_nonce=nonce))
+
+
+# -- which request the hit is attributed to --------------------------------
+#
+# The verdict never turns on this: a hit plus any target-directed request
+# carrying the nonce is a violation. The *evidence* does, and the evidence is
+# what a generated regression test replays and what the eval harness scopes a
+# finding by. This section exists because a real scan got it wrong.
+
+
+def _attempt(status, url, *, started_at, path="/api/imports/preview"):
+    return HttpObservation(
+        method="POST",
+        url=path,
+        path=path,
+        sent_as="alice",
+        status=status,
+        request_body=json.dumps({"url": url}),
+        started_at=started_at,
+    )
+
+
+def test_evidence_names_the_request_that_worked_not_the_first_one_tried():
+    """The ordering that broke a live run: a rejected attack, then a working one."""
+    probe = f"http://127.0.0.1:9/probe/{NONCE}"
+    rejected = _attempt(400, f"http://localhost@{probe}", started_at=100.0)
+    fetched = _attempt(200, probe, started_at=101.0, path="/api/imports/preview")
+    hit = CallbackHit(path=f"/probe/{NONCE}", nonce=NONCE, received_at=101.5)
+
+    verdict = check_ssrf(
+        [rejected, fetched], OracleContext(callback_hits=[hit], callback_nonce=NONCE)
+    )
+
+    assert verdict.violated is True
+    assert verdict.evidence["status"] == 200
+    assert "localhost@" not in verdict.evidence["request_body"]
+
+
+def test_a_request_sent_after_the_hit_cannot_be_the_cause():
+    probe = f"http://127.0.0.1:9/probe/{NONCE}"
+    caused = _attempt(200, probe, started_at=100.0)
+    later = _attempt(200, probe, started_at=200.0)
+    hit = CallbackHit(path=f"/probe/{NONCE}", nonce=NONCE, received_at=100.5)
+
+    verdict = check_ssrf(
+        [caused, later], OracleContext(callback_hits=[hit], callback_nonce=NONCE)
+    )
+
+    assert verdict.violated is True
+    assert verdict.evidence["request_body"] == caused.request_body
+
+
+def test_a_fetch_behind_an_error_status_still_supplies_the_evidence():
+    """Some targets fetch and then fail. Non-2xx is a fallback, not a filter."""
+    probe = f"http://127.0.0.1:9/probe/{NONCE}"
+    errored = _attempt(502, probe, started_at=100.0)
+    hit = CallbackHit(path=f"/probe/{NONCE}", nonce=NONCE, received_at=100.5)
+
+    verdict = check_ssrf(
+        [errored], OracleContext(callback_hits=[hit], callback_nonce=NONCE)
+    )
+
+    assert verdict.violated is True
+    assert verdict.evidence["status"] == 502
+
+
+def test_observations_without_timestamps_still_attribute():
+    """Old traces and Flask-built observations have no clock; order still works."""
+    probe = f"http://127.0.0.1:9/probe/{NONCE}"
+    rejected = _attempt(400, probe, started_at=0.0)
+    fetched = _attempt(200, probe, started_at=0.0)
+    hit = CallbackHit(path=f"/probe/{NONCE}", nonce=NONCE, received_at=0.0)
+
+    verdict = check_ssrf(
+        [rejected, fetched], OracleContext(callback_hits=[hit], callback_nonce=NONCE)
+    )
+
+    assert verdict.evidence["status"] == 200
