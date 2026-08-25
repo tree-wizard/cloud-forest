@@ -43,7 +43,7 @@ $ aisec scan ./notes-app
 
 prompt-injection attempts logged: 5
   [read_file] ai_review_bait (turn 1) — ignored
-  ...
+  ...                                            (4 more; full list in the transcript)
 
 3 verified, 1 rejected, 4 hypotheses over 14 turns, 4 requests.
 tokens: 325 in / 10899 out, 181692 cache-read   cost: $0.2063
@@ -198,8 +198,10 @@ $ aisec eval --report evals/RESULTS.md
 
 ### Results
 
-Full table and cost breakdown: [`evals/RESULTS.md`](evals/RESULTS.md), written by
-`aisec eval --report` and by nothing else.
+[`evals/RESULTS.md`](evals/RESULTS.md) is the per-case table and cost breakdown for the
+Sonnet 5 run, written by `aisec eval --report` and by nothing else. The Haiku column below
+is read off its own transcript, [`evals/runs/eval-haiku-4-5.txt`](evals/runs/eval-haiku-4-5.txt);
+both raw runs are committed.
 
 | metric | Claude Sonnet 5 | Claude Haiku 4.5 |
 | --- | --- | --- |
@@ -231,8 +233,9 @@ Three things the harness deliberately refuses to do:
   reproducing request, not over the hypothesis's self-reported `file:line`.
   `/api/notes/1002` and `/api/notes/1002/metadata` differ by one path segment and are
   opposite in ground truth; the trap must not be able to collect the real bug's credit.
-  Both runs verified one real bug *outside* its case's scope — reported in its own column,
-  excluded from precision, counted as neither a hit nor a false positive.
+  Both runs verified one real bug *outside* its case's scope — printed on its own line by
+  `aisec eval` (see either transcript), excluded from precision, counted as neither a hit
+  nor a false positive.
 - **Tip its hand.** True-positive and false-positive scope notes are worded the same
   way ("decide for yourself whether object-level authorization holds"). A benchmark
   whose prompt contains the answer measures the prompt.
@@ -455,16 +458,16 @@ proven against a scripted one — 195 tests, zero API calls. The expensive thing
 loop is the model, so the only runs that spend money are the ones whose numbers get
 published.
 
-**What I'd optimise next**, in order: a Haiku triage pass that only picks files (the
-measurement above says the win is smaller than it looks, so it needs to be measured, not
-assumed); diff-scoped runs so a PR only pays for changed files; and a longer cache TTL for
-suite runs, where eight scans share one system prompt but currently each pay to write it.
-
 ## What I'd build next
 
-- Diff-scoped runs so a PR only pays for what changed.
-- More classes, one at a time, each gated on "can I write an oracle I trust?"
-- Human-in-the-loop triage for hypotheses that fail verification but aren't clearly safe
-  — right now they're dropped, and that's a recall cost I'd want to see measured. The eval
-  suite already knows how to measure it: the number to watch is the 45% of hypotheses that
-  didn't survive.
+In rough order:
+
+- **Diff-scoped runs**, so a PR only pays for the files it changed. Biggest cost win, and
+  the one that makes this usable in CI.
+- **A longer cache TTL for suite runs** — eight scans share one system prompt today and
+  each pays to write it.
+- **A Haiku triage pass that only picks files.** The measurement above says the win is
+  smaller than the per-token price suggests, so it ships only with a number attached.
+- **More classes, one at a time**, each gated on "can I write an oracle I'd defend?"
+- **Human-in-the-loop triage for rejected hypotheses.** They're dropped today, and that's
+  a recall cost I'd want measured; the number to watch is the 45% that didn't survive.
