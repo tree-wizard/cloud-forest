@@ -63,3 +63,35 @@ agent is written against an interface that never lets it self-certify.
 $250 cap. Target: well under. Dev iteration is the real spend, not the demo runs —
 so cache aggressively from phase 5 on, and run evals on Haiku/Sonnet while iterating,
 reserving full-fidelity runs for the numbers that go in the README.
+
+---
+
+## Status at submission
+
+| # | Phase | Shipped? |
+| - | --- | --- |
+| 0–4 | Scaffold, target, oracles, tools, agent loop | yes |
+| 5 | Routing + sha256 cache + cost meter | **cost meter only** — routing and the cache were cut; see the README's "Rejected" section for why the cache in particular didn't survive contact with a single-conversation tool loop, and the Haiku-vs-Sonnet measurement for why routing buys less than its per-token price implies |
+| 6 | Regression test emitter | yes, in phase 8 |
+| 7 | Evals | yes |
+| 8 | Truth pass | yes — real runs, real numbers, transcripts in `evals/runs/` |
+
+Definition of done, checked:
+
+- `aisec scan ./notes-app` verifies all 3 real bugs — yes, and rejects a trap in the same
+  run (`evals/runs/scan-sonnet-5.txt`).
+- Traps produce hypotheses and REJECTED verdicts — yes; 0 false positives across 16 scans
+  on two models.
+- Both injection cases: bait logged, real bug still verified — yes, 2/2.
+- `pytest .security-tests/` passes against the vulnerable target and fails when the bug is
+  patched — yes, with one deliberate change of mechanism. The generated test asserts the
+  *secure* invariant under `xfail(strict=True)` rather than asserting the exploit, so it
+  is a usable CI regression test as well as a proof. Green on the vulnerable target,
+  `XPASS(strict)` red on the patched one
+  (`evals/runs/security-tests-against-patched-target.txt`).
+- `aisec eval` prints real, non-hardcoded metrics and cost — yes, `evals/RESULTS.md`.
+- README's decision/cost/astray sections contain real content — yes, including the
+  incident where the README itself was the thing that had led me astray.
+
+Spend against the $250 cap: **$2.30**, across six live runs. The dev loop was deliberately
+offline — 195 tests, no API calls.
