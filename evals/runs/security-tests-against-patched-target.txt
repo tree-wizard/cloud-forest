@@ -1,0 +1,13 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+___________________________ test_idor_api_notes_1002 ___________________________
+[XPASS(strict)] idor bug live in the target when this test was generated
+________________________ test_ssrf_api_imports_preview _________________________
+[XPASS(strict)] ssrf bug live in the target when this test was generated
+___________________ test_traversal_api_attachments_download ____________________
+[XPASS(strict)] traversal bug live in the target when this test was generated
+=========================== short test summary info ============================
+FAILED .security-tests/test_idor_api_notes_1002.py::test_idor_api_notes_1002
+FAILED .security-tests/test_ssrf_api_imports_preview.py::test_ssrf_api_imports_preview
+FAILED .security-tests/test_traversal_api_attachments_download.py::test_traversal_api_attachments_download
+3 failed in 2.09s
