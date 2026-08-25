@@ -587,29 +587,23 @@ def http_request(
         )
 
     elapsed = (time.monotonic() - started) * 1000
-    body_text = response.text[:MAX_RECORDED_BODY_BYTES]
-    try:
-        parsed = response.json()
-    except Exception:  # noqa: BLE001 - a hostile body must not break the trace
-        parsed = None
 
     # The observation carries the whole body, because the oracle reads it. The
-    # model gets a truncated, scrubbed view.
-    sandbox.trace.append(
-        HttpObservation(
-            method=method,
-            url=url,
-            path=path,
-            query=query_string,
-            sent_as=sent_as,
-            status=response.status_code,
-            headers=dict(response.headers),
-            request_body=request_body,
-            body_text=body_text,
-            json=parsed,
-            elapsed_ms=elapsed,
-        )
+    # model gets a truncated, scrubbed view. `from_httpx` is shared with the
+    # regression tests `emit.py` writes, so a generated test observes the target
+    # through the same constructor the scan did.
+    observation = HttpObservation.from_httpx(
+        response,
+        sent_as=sent_as,
+        method=method,
+        path=path,
+        query=query_string,
+        request_body=request_body,
+        elapsed_ms=elapsed,
+        max_body_bytes=MAX_RECORDED_BODY_BYTES,
     )
+    sandbox.trace.append(observation)
+    body_text = observation.body_text
 
     view = body_text[:MODEL_VIEW_CHARS]
     if len(body_text) > MODEL_VIEW_CHARS:

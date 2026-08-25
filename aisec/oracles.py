@@ -67,6 +67,48 @@ class HttpObservation:
             json=parsed,
         )
 
+    @classmethod
+    def from_httpx(
+        cls,
+        response,
+        *,
+        sent_as: str | None,
+        method: str,
+        path: str,
+        query: str = "",
+        request_body: str = "",
+        elapsed_ms: float = 0.0,
+        max_body_bytes: int | None = None,
+    ) -> HttpObservation:
+        """Build an observation from an httpx response.
+
+        The tool layer and the emitted regression tests both go through here, so
+        a generated test observes the target exactly the way the scan that found
+        the bug did. A body that will not parse as JSON is not an error: `json`
+        stays None and the oracles' fail-closed branches handle it.
+        """
+        body_text = response.text
+        if max_body_bytes is not None:
+            body_text = body_text[:max_body_bytes]
+        try:
+            parsed = response.json()
+        except Exception:  # noqa: BLE001 - a hostile body must not break the trace
+            parsed = None
+        url = path if not query else f"{path}?{query}"
+        return cls(
+            method=method.upper(),
+            url=url,
+            path=path,
+            query=query,
+            sent_as=sent_as,
+            status=response.status_code,
+            headers=dict(response.headers),
+            request_body=request_body,
+            body_text=body_text,
+            json=parsed,
+            elapsed_ms=elapsed_ms,
+        )
+
 
 @dataclass(frozen=True)
 class CallbackHit:

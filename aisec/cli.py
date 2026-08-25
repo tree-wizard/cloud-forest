@@ -35,6 +35,7 @@ def _health_ok(base_url: str) -> bool:
 def cmd_scan(args: argparse.Namespace) -> int:
     from aisec.agent import run_scan
     from aisec.callback import CallbackServer
+    from aisec.emit import EmitError, emit_test
     from aisec.tools import Sandbox
 
     base_url = args.base_url
@@ -63,17 +64,33 @@ def cmd_scan(args: argparse.Namespace) -> int:
                 max_turns=args.max_turns,
                 budget_usd=args.budget,
             )
+            # Emit while the listener is still up: `Sandbox.scrub` needs it to
+            # re-tokenize the probe URL, and a committed test must not carry a
+            # dead port. A finding is a finding either way, so a template that
+            # fails is reported, never fatal.
+            emitted: dict[int, str] = {}
+            if not args.no_tests:
+                for index, finding in enumerate(report.findings):
+                    if finding.status != "VERIFIED":
+                        continue
+                    try:
+                        emitted[index] = str(
+                            emit_test(finding, sandbox, args.tests_dir)
+                        )
+                    except (EmitError, OSError) as exc:
+                        emitted[index] = f"(not written: {exc})"
         finally:
             sandbox.close()
 
-    _print_report(report)
+    _print_report(report, emitted)
     return 0
 
 
-def _print_report(report) -> None:
+def _print_report(report, emitted: dict[int, str] | None = None) -> None:
     print(f"\naisec scan {report.source_root}  (model {report.model})\n")
 
-    for finding in report.findings:
+    emitted = emitted or {}
+    for index, finding in enumerate(report.findings):
         hyp = finding.hypothesis
         print(f"[HYPOTHESIS] {hyp.title}   {hyp.file}:{hyp.line}")
         print("  testing...")
@@ -83,7 +100,10 @@ def _print_report(report) -> None:
         v = finding.verdict
         print(f"  ORACLE  {v.oracle}: {v.invariant}   -> {v.status}")
         mark = "✓ VERIFIED" if finding.status == "VERIFIED" else "✗ REJECTED"
-        print(f"  {mark}  {v.detail}\n")
+        print(f"  {mark}  {v.detail}")
+        if index in emitted:
+            print(f"  regression test written: {emitted[index]}")
+        print()
 
     if report.injection_attempts:
         print(f"prompt-injection attempts logged: {len(report.injection_attempts)}")
@@ -212,6 +232,15 @@ def build_parser() -> argparse.ArgumentParser:
     scan_parser.add_argument("--max-turns", type=int, default=24)
     scan_parser.add_argument(
         "--budget", type=float, default=5.0, help="per-scan dollar cap"
+    )
+    scan_parser.add_argument(
+        "--tests-dir",
+        default=".security-tests",
+        help="where regression tests for verified findings are written "
+        "(default .security-tests)",
+    )
+    scan_parser.add_argument(
+        "--no-tests", action="store_true", help="verify only; write no test files"
     )
     scan_parser.set_defaults(func=cmd_scan)
 
