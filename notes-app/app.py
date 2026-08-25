@@ -20,7 +20,7 @@ APP_ROOT = Path(__file__).resolve().parent
 def create_app(test_config: dict | None = None) -> Flask:
     """Create an app with deterministic seed state unless explicitly disabled."""
 
-    port = int(os.environ.get("NOTES_APP_PORT", "5000"))
+    port = int(os.environ.get("NOTES_APP_PORT", "5001"))
     app = Flask(__name__)
     app.config.from_mapping(
         DATABASE=str(APP_ROOT / "instance" / "notes.sqlite3"),

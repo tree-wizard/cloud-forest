@@ -204,7 +204,7 @@ _CONSTANTS = '''\
 from aisec.oracles import HttpObservation, OracleContext, {check}
 
 
-BASE_URL = os.environ.get("AISEC_TARGET_URL", "http://127.0.0.1:5000").rstrip("/")
+BASE_URL = os.environ.get("AISEC_TARGET_URL", "http://127.0.0.1:5001").rstrip("/")
 
 METHOD = {method}
 PATH = {path}

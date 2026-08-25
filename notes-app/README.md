@@ -19,14 +19,14 @@ python3 -m venv .venv
 ./notes-app/run.py
 ```
 
-The API listens on `http://127.0.0.1:5000`. Set `NOTES_APP_PORT` to use another local
+The API listens on `http://127.0.0.1:5001`. Set `NOTES_APP_PORT` to use another local
 port. Each launch rebuilds `notes-app/instance/notes.sqlite3` from fixed seed data, so
 scans always begin with the same state.
 
 Check that it is ready:
 
 ```bash
-curl http://127.0.0.1:5000/health
+curl http://127.0.0.1:5001/health
 ```
 
 ## Test identities
@@ -35,13 +35,13 @@ Authenticated routes expect an `X-User` header. The two seeded identities are `a
 and `bob`; there are no passwords or real credentials.
 
 ```bash
-curl -H 'X-User: alice' http://127.0.0.1:5000/api/notes
+curl -H 'X-User: alice' http://127.0.0.1:5001/api/notes
 
 curl -X POST \
   -H 'Content-Type: application/json' \
   -H 'X-User: alice' \
   -d '{"title":"Demo note","body":"Synthetic content only"}' \
-  http://127.0.0.1:5000/api/notes
+  http://127.0.0.1:5001/api/notes
 ```
 
 The API provides note listing, creation, lookup, search, metadata, attachment download,

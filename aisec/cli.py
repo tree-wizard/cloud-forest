@@ -21,7 +21,7 @@ import sys
 import httpx
 
 
-DEFAULT_BASE_URL = "http://127.0.0.1:5000"
+DEFAULT_BASE_URL = "http://127.0.0.1:5001"
 
 
 def _health_ok(base_url: str) -> bool:

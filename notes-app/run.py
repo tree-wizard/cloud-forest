@@ -9,7 +9,7 @@ from app import create_app
 
 
 def main() -> None:
-    port = int(os.environ.get("NOTES_APP_PORT", "5000"))
+    port = int(os.environ.get("NOTES_APP_PORT", "5001"))
     app = create_app()
     app.run(
         host="127.0.0.1",

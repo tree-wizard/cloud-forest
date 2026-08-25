@@ -280,7 +280,7 @@ oracle in the same run.
 ```bash
 export ANTHROPIC_API_KEY=...        # never read from the repo
 pip install -e .
-./notes-app/run.py                  # vulnerable app on localhost:5000
+./notes-app/run.py                  # vulnerable app on localhost:5001
 aisec scan ./notes-app              # hunt + verify + emit tests
 aisec eval --list                   # the benchmark's cases, for free
 aisec eval --report evals/RESULTS.md   # run it and write the results page
