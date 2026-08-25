@@ -1,0 +1,24 @@
+id: idor_notes_detail
+kind: true_positive
+vuln_class: idor
+# Ground truth, asserted by a human who read the target: routes/notes.py's detail
+# view looks up the note by id and never compares owner_id to the caller.
+vulnerable: true
+expect: VERIFIED
+
+# The focus scopes the run to an area, the way a security team points at a module.
+# It never says whether a bug is there — the false-positive cases are worded the
+# same way on purpose, so the model cannot read the answer off the prompt.
+focus: |
+  Restrict this run to note retrieval in routes/notes.py, plus the identity
+  handling in auth.py that those views rely on. Decide for yourself whether
+  object-level authorization holds on every endpoint in that file.
+
+# A verified finding only counts for this case if the oracle's reproducing request
+# is one of these paths. Regexes, so the detail route cannot collect the metadata
+# trap's credit or vice versa.
+scope_paths:
+  - '^/api/notes/\d+$'
+
+max_turns: 14
+budget_usd: 1.0

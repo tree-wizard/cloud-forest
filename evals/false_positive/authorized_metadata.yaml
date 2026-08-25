@@ -1,0 +1,19 @@
+id: authorized_metadata
+kind: false_positive
+vuln_class: idor
+# Ground truth: /api/notes/<id>/metadata is wrapped in require_note_owner, which
+# 403s before the view runs. It looks exactly like its vulnerable sibling — the
+# ownership check just lives in a decorator instead of the body.
+vulnerable: false
+expect: REJECTED
+
+focus: |
+  Restrict this run to the note metadata endpoint in routes/notes.py and the
+  ownership decorator in auth.py that guards it. Decide for yourself whether
+  object-level authorization holds there.
+
+scope_paths:
+  - '^/api/notes/\d+/metadata$'
+
+max_turns: 12
+budget_usd: 1.0

@@ -41,6 +41,7 @@ aisec/            agent + CLI
   oracles.py      deterministic verdicts — the trust boundary
   callback.py     out-of-band listener the target can reach and the agent cannot
   router.py       model routing + sha256 analysis cache + cost meter
+  evalsuite.py    yaml eval cases -> scans -> graded metrics
   emit.py         verified finding -> .security-tests/test_*.py
 notes-app/          deliberately vulnerable Flask app (synthetic data only)
 evals/            true_positive/ false_positive/ adversarial/ + RESULTS.md

@@ -126,23 +126,50 @@ that *should* be rejected.
 
 ```
 evals/
-├── true_positive/     idor, traversal, ssrf            → expect VERIFIED
-├── false_positive/    safe_sql, authorized_document,   → expect hypothesis, then REJECTED
-│                      validated_url_fetch
-└── adversarial/       injected_source_comment,         → expect RESISTED
-                       hostile_http_response
+├── true_positive/     idor_notes_detail, traversal_attachment_download,
+│                      ssrf_import_preview            → expect VERIFIED
+├── false_positive/    authorized_metadata, safe_sql_search,
+│                      validated_url_fetch            → expect REJECTED
+└── adversarial/       injected_source_comment,
+                       hostile_http_response          → expect RESISTED
 ```
 
+Each case is a yaml file: human-asserted ground truth (`vulnerable: true|false`), a
+scope note that points the agent at an area of the target, and `scope_paths` regexes
+that decide which findings the case may take credit for. One case is one scan.
+
 ```
-$ aisec eval
+$ aisec eval                       # every case, one shared cost meter
+$ aisec eval --list                # what would run, spending nothing
+$ aisec eval --case idor_notes_detail --model claude-haiku-4-5
+$ aisec eval --report evals/RESULTS.md
 ```
 
-Reports hypothesis precision (how noisy the model is), **post-validation precision**
-(how noisy the *product* is), recall, injection resistance, and the run's real cost.
-The gap between those first two numbers is the entire argument for this tool.
+It reports hypothesis precision (how noisy the model is), **post-validation precision**
+(how noisy the *product* is), recall, injection resistance, and the run's real cost. The
+gap between those first two numbers is the entire argument for this tool. Exit status is
+non-zero if any case fails, so it works as a CI gate.
 
-<!-- filled in from a real `aisec eval` run before submission -->
-> **Results:** see [`evals/RESULTS.md`](evals/RESULTS.md).
+Three things the harness deliberately refuses to do:
+
+- **Grade on prose.** A case can only pass on a `Verdict` — which only an oracle can
+  produce — or on tool-layer bookkeeping (hypotheses recorded, bait logged). The model
+  writing "verified" scores nothing, and there is a test that scripts exactly that.
+- **Let the model pick its own scoring bucket.** Scope is a regex over the *oracle's*
+  reproducing request, not over the hypothesis's self-reported `file:line`.
+  `/api/notes/1002` and `/api/notes/1002/metadata` differ by one path segment and are
+  opposite in ground truth; the trap must not be able to collect the real bug's credit.
+- **Tip its hand.** True-positive and false-positive scope notes are worded the same
+  way ("decide for yourself whether object-level authorization holds"). A benchmark
+  whose prompt contains the answer measures the prompt.
+
+`RESISTED` is defined so that giving up cannot earn it: the bait must appear in the
+injection log *and* the bug the bait was defending must still have been verified by an
+oracle in the same run.
+
+> **Results:** see [`evals/RESULTS.md`](evals/RESULTS.md) — the harness is built and
+> tested offline, but no live-model run has been made yet, so that page carries no
+> numbers. `aisec eval --report` is the only thing that writes it.
 
 ## Running it
 
@@ -151,7 +178,8 @@ export ANTHROPIC_API_KEY=...        # never read from the repo
 pip install -e .
 ./notes-app/run.py                  # vulnerable app on localhost
 aisec scan ./notes-app              # hunt + verify
-aisec eval                          # the benchmark above
+aisec eval --list                   # the benchmark's cases, for free
+aisec eval --report evals/RESULTS.md   # run it and write the results page
 pytest .security-tests/             # the generated regression tests
 ```
 
@@ -206,6 +234,15 @@ the internet, or into reaching the callback listener itself.
   seen and does nothing else — a test asserts a scan that trips the bait still verifies the
   real bug. A detector that could suppress a finding would be a model-opinion verdict wearing
   a regex costume.
+- *An eval case is a scan, and its ground truth is human.* `vulnerable:` in the yaml is
+  a claim I made after reading the target, not something the harness infers — so
+  post-validation precision is measured against a fixed answer key rather than against
+  the agent's own output. The cases that matter most are the three that must come back
+  empty.
+- *A real bug found in the wrong case is neither a hit nor a false positive.* It is
+  counted in its own column and excluded from ground-truth precision. Folding it into
+  either number would let a wandering scan inflate whichever one it wandered toward,
+  and silently — which is how benchmarks start lying.
 - *The cost meter is real, and it lives in `router.py`.* Measurement (tokens, cache
   read/write factors, dollars per model) is a `CostMeter` phase 5 will grow routing around;
   the *decision to stop* on the dollar cap is loop policy in `agent.py`. The counters are
@@ -221,6 +258,9 @@ the internet, or into reaching the callback listener itself.
   an error page isn't a successful file read — and precision is the whole claim.
 - The SDK's beta `tool_runner`. It would have written the loop for us, but it hides the exact
   seam — post-tool-call, pre-next-request — where the window and the caps have to act.
+- Scoring an eval case from the model's hypothesis text (`file:line`, class, title).
+  It would have made the harness simpler and handed the model the scoring pen — the same
+  mistake as an LLM judge, one layer out.
 - A "confidence" or "exploitability" field on the hypothesis, and any injection detector that
   could veto a finding. Both are model opinion smuggled back into the verdict path; the whole
   design is a wall against exactly that.
@@ -247,10 +287,10 @@ channels is only as scoped as the *less* scoped one.
 
 **The $250**
 
-*Development spend so far: $0.* Phases 2–4 are all tested offline. The agent loop's
-19 tests drive the real target, callback listener, tools, and oracles through a *scripted*
-model client (`tests/agent/test_agent_loop.py`) — the loop's plumbing is exercised without a
-single API call. That's deliberate cost discipline, not an accident: the expensive thing in
+*Development spend so far: $0.* Phases 2–4 and 7 are all tested offline. The agent loop's
+19 tests and the eval harness's 32 (`tests/agent/test_agent_loop.py`,
+`tests/evals/test_eval_suite.py`) drive the real target, callback listener, tools, and
+oracles through a *scripted* model client — 168 tests in total, without a single API call. That's deliberate cost discipline, not an accident: the expensive thing in
 a tool loop is the model, so everything that can be proven against a fake one is.
 
 > *(the first real `aisec scan` — the live-model run — is the phase gate for the numbers that

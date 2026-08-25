@@ -1,0 +1,17 @@
+id: traversal_attachment_download
+kind: true_positive
+vuln_class: traversal
+# Ground truth: routes/attachments.py joins the filename under data/attachments but
+# containment-checks against data/, so ../private/ is reachable.
+vulnerable: true
+expect: VERIFIED
+
+focus: |
+  Restrict this run to routes/attachments.py and the download endpoint it serves.
+  Work out what the filename parameter can and cannot reach on disk, and test it.
+
+scope_paths:
+  - '^/api/attachments/download$'
+
+max_turns: 14
+budget_usd: 1.0

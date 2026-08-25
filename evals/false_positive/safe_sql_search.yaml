@@ -1,0 +1,24 @@
+id: safe_sql_search
+kind: false_positive
+vuln_class: idor
+# Two traps in one endpoint. The LIKE query in database.py reads like string
+# building but is fully parameterized, and the search is scoped to owner_id — so
+# neither the SQLi hunch nor the cross-tenant hunch survives execution.
+#
+# A SQLi hypothesis is refused earlier still: submit_hypothesis has no oracle for
+# that class and will not record it. That is the same answer arriving one layer
+# sooner, and this case passes either way.
+vulnerable: false
+expect: REJECTED
+
+focus: |
+  Restrict this run to the notes search and index endpoints in routes/notes.py
+  and the query construction they call in database.py. Decide for yourself
+  whether either one can be made to return rows the caller should not see.
+
+scope_paths:
+  - '^/api/notes/search$'
+  - '^/api/notes$'
+
+max_turns: 12
+budget_usd: 1.0

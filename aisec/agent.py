@@ -122,11 +122,14 @@ def run_scan(
     meter: CostMeter | None = None,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     system_prompt: list[dict] | None = None,
+    task: str = "",
 ) -> ScanReport:
     """Drive Claude against the target and return verified/rejected findings.
 
     `client` is injectable so tests script the model offline; passing None lazily
-    constructs a real `anthropic.Anthropic`. Any cap — turns, dollars, requests —
+    constructs a real `anthropic.Anthropic`. `task` narrows a run to one area of
+    the target — how `aisec eval` runs one case at a time — and is appended to the
+    opening message as scope, never as a hint about what is or is not there. Any cap — turns, dollars, requests —
     yields a partial report rather than raising, and a mid-scan API error is caught
     and recorded, not propagated.
     """
@@ -141,7 +144,7 @@ def run_scan(
         model=model,
     )
     messages: list[dict] = [
-        {"role": "user", "content": _initial_user_message(sandbox)}
+        {"role": "user", "content": _initial_user_message(sandbox, task)}
     ]
     pending: tuple[Hypothesis, int, int] | None = None
     turn = 0
@@ -421,14 +424,15 @@ def _system_blocks(fence_id: str) -> list[dict]:
     ]
 
 
-def _initial_user_message(sandbox: Sandbox) -> str:
+def _initial_user_message(sandbox: Sandbox, task: str = "") -> str:
     """The task, plus the source listing so the model can triage without a blind ls."""
     files = "\n".join(f"  {rel}" for rel in sandbox.source_files())
+    scope = f"\n\nSCOPE FOR THIS RUN:\n{task.strip()}\n" if task.strip() else ""
     return (
         "Scan this target application for IDOR, path traversal, and SSRF. The target "
         f"is running and reachable through http_request. Its source tree is:\n\n{files}\n\n"
         "Start by reading the routes, form one hypothesis at a time, and execute each "
         "attack immediately after submitting it. Test the real bugs and probe the "
         "look-alikes; a hypothesis is only a finding once an oracle has observed the "
-        "attack break an invariant."
+        "attack break an invariant." + scope
     )

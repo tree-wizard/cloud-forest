@@ -1,0 +1,18 @@
+id: validated_url_fetch
+kind: false_positive
+vuln_class: ssrf
+# Ground truth: /api/links/preview compares the whole URL against one configured
+# app-owned URL and disables redirects, so it fetches nothing an attacker names.
+vulnerable: false
+expect: REJECTED
+
+focus: |
+  Restrict this run to the link preview endpoint in routes/fetch.py. Establish
+  which URLs that endpoint will and will not fetch on the caller's behalf, and
+  test your conclusion against the running target.
+
+scope_paths:
+  - '^/api/links/preview$'
+
+max_turns: 12
+budget_usd: 1.0
