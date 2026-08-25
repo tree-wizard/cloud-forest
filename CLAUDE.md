@@ -40,7 +40,7 @@ aisec/            agent + CLI
   tools.py        read_file, search_code, http_request, submit_hypothesis
   oracles.py      deterministic verdicts — the trust boundary
   callback.py     out-of-band listener the target can reach and the agent cannot
-  router.py       model routing + sha256 analysis cache + cost meter
+  router.py       the cost meter (routing + sha256 cache were cut — see README)
   evalsuite.py    yaml eval cases -> scans -> graded metrics
   emit.py         verified finding -> .security-tests/test_*.py
 notes-app/          deliberately vulnerable Flask app (synthetic data only)
@@ -67,13 +67,18 @@ challenge_docs/   the brief. Not code.
 
 The $250 is a graded dimension, not just a limit.
 
-- Route by difficulty: Haiku triage → Sonnet reasoning/attack → Opus only after two
-  failed verifications.
-- Cache file analyses by `sha256(contents)`; cache the system prompt and tool schemas.
+- Prompt caching carries this: one breakpoint on the system prompt, one rolling forward
+  onto the newest tool result each turn. That took a scan from 130,053 uncached input
+  tokens to 325. Do not add a breakpoint without removing the one it replaces — four per
+  request is the API's ceiling.
+- Model routing and a `sha256(contents)` analysis cache were planned and cut. The cache
+  assumed a per-file-analysis call this architecture does not make; routing measured worse
+  than its per-token price implies (Haiku: 2x the turns, 2/3 the recall). Re-propose either
+  only with a measurement attached.
 - Every run records requests, input/output tokens, and dollars. Those counters feed the
   README — they must be real, never hardcoded or estimated.
 - While iterating, run against cached fixtures or cheap models. Save full runs for the
-  numbers that get published.
+  numbers that get published. Live spend to date: $2.30 of $250, over six runs.
 
 ## Reliability expectations
 
