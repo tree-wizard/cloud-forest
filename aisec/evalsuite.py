@@ -33,7 +33,10 @@ number depending on which case it wandered from.
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
@@ -547,8 +550,135 @@ def format_table(suite: SuiteResult) -> str:
     return "\n".join(lines) + "\n"
 
 
-def format_markdown(suite: SuiteResult, *, generated_by: str = "aisec eval") -> str:
-    """`evals/RESULTS.md`, written only from a run that actually happened."""
+def utc_stamp(moment: datetime | None = None) -> str:
+    """`20260825T143012Z` — sortable, filename-safe, unambiguous about timezone."""
+    moment = moment or datetime.now(timezone.utc)
+    return moment.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def git_provenance() -> dict[str, Any]:
+    """The commit a run was measured against, or nulls.
+
+    Metadata must never cost a run: git being absent, the repo being a tarball, or
+    the subprocess timing out all yield nulls rather than an exception, because by
+    the time this is called the API calls have already been paid for.
+    """
+    def _git(*args: str) -> str | None:
+        try:
+            done = subprocess.run(
+                ("git", *args), capture_output=True, text=True, timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return done.stdout.strip() if done.returncode == 0 else None
+
+    sha = _git("rev-parse", "--short", "HEAD")
+    status = _git("status", "--porcelain")
+    return {"git_sha": sha, "git_dirty": bool(status) if status is not None else None}
+
+
+def as_record(
+    suite: SuiteResult,
+    *,
+    generated_by: str = "aisec eval",
+    case_filter: dict[str, Any] | None = None,
+    started_at: str | None = None,
+    finished_at: str | None = None,
+) -> dict[str, Any]:
+    """One run, serialized for the archive.
+
+    Every measured number is taken from `metrics()` verbatim rather than
+    recomputed, so a record can never disagree with the markdown built from the
+    same suite. `case_filter` is `None` for a full suite run and carries the
+    `--case`/`--kind` selection otherwise — a partial run has to be legible as
+    one, since its metrics are not the suite's.
+    """
+    metrics = suite.metrics()
+    finished = finished_at or datetime.now(timezone.utc).isoformat()
+    started = started_at or finished
+    stamp = utc_stamp(datetime.fromisoformat(started))
+    record: dict[str, Any] = {
+        "run_id": f"{stamp}-{suite.model}",
+        "generated_by": generated_by,
+        "started_at": started,
+        "finished_at": finished,
+        "argv": list(sys.argv),
+        "case_filter": case_filter,
+        "model": suite.model,
+        "base_url": suite.base_url,
+        "source_root": suite.source_root,
+        "cost_usd": metrics["cost_usd"],
+        "metrics": metrics,
+        # The full meter, so `priced_on` and the per-model rates survive — the
+        # markdown drops them, and without them a dollar figure is unauditable.
+        "usage": suite.meter.as_dict(),
+        "cases": [
+            {
+                "id": r.case.id,
+                "kind": r.case.kind,
+                "expect": r.case.expect,
+                "outcome": r.outcome,
+                "passed": r.passed,
+                "reason": r.reason,
+                "hypotheses": r.hypotheses,
+                "verified_in_scope": r.verified_here,
+                "verified_off_scope": len(r.off_scope_verified),
+                "turns": r.report.turns_used,
+                "requests": r.report.requests_made,
+                "partial": r.report.partial,
+                "cost_usd": r.cost_usd,
+            }
+            for r in suite.results
+        ],
+    }
+    record.update(git_provenance())
+    return record
+
+
+def _provenance_lines(record: dict[str, Any] | None) -> list[str]:
+    """Which run produced this file. Absent fields are omitted, never guessed."""
+    if not record:
+        return []
+    parts = [f"Run `{record['run_id']}`", f"started {record['started_at']}"]
+    if record.get("git_sha"):
+        dirty = " (working tree dirty)" if record.get("git_dirty") else ""
+        parts.append(f"commit `{record['git_sha']}`{dirty}")
+    selection = record.get("case_filter")
+    if selection:
+        detail = ", ".join(
+            f"{key}={value}" for key, value in sorted(selection.items())
+        )
+        parts.append(
+            f"**Partial selection** ({detail}) — these are a subset's numbers, "
+            "not the suite's"
+        )
+    return [". ".join(parts) + ".", ""]
+
+
+def _spend_lines(spend: dict[str, Any] | None) -> list[str]:
+    """Cumulative spend, summed over the archive — the $250 cap is graded."""
+    if not spend or not spend.get("runs"):
+        return []
+    return [
+        f"- Cumulative across {spend['runs']} archived run(s): "
+        f"${spend['total_cost_usd']:.4f} of the ${spend['budget_usd']:.0f} cap "
+        f"(counted from `evals/runs/*.json`; runs predating the archive are not in it)"
+    ]
+
+
+def format_markdown(
+    suite: SuiteResult,
+    *,
+    generated_by: str = "aisec eval",
+    record: dict[str, Any] | None = None,
+    spend: dict[str, Any] | None = None,
+) -> str:
+    """`evals/RESULTS.md`, written only from a run that actually happened.
+
+    `record` supplies the provenance the file used to lack: which run, when, and
+    against which commit. `spend` is the archive ledger, so the cumulative figure
+    is summed from files on disk rather than remembered in prose.
+    """
     metrics = suite.metrics()
     totals = metrics["usage"]["totals"]
     lines = [
@@ -559,6 +689,7 @@ def format_markdown(suite: SuiteResult, *, generated_by: str = "aisec eval") -> 
         "outcomes come from oracle verdicts, the cost from `CostMeter` reading the "
         "SDK's usage objects. Nothing here is estimated or hand-written.",
         "",
+        *_provenance_lines(record),
         "## Cases",
         "",
         "| case | kind | expect | outcome | result | hypotheses | verified in scope | cost | why |",
@@ -603,6 +734,7 @@ def format_markdown(suite: SuiteResult, *, generated_by: str = "aisec eval") -> 
         f"- Target traffic: {metrics['requests']} HTTP requests over "
         f"{metrics['turns']} model turns"
         + (f", {metrics['partial_scans']} scan(s) stopped on a cap" if metrics["partial_scans"] else ""),
+        *_spend_lines(spend),
     ]
     per_model = metrics["usage"]["per_model"]
     if len(per_model) > 1:

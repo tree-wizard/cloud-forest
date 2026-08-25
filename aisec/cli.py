@@ -10,6 +10,13 @@ the same running target, graded from oracle verdicts, with one cost meter across
 the suite. It exits non-zero when a case fails, so it is usable as a gate — and
 `--report` writes `evals/RESULTS.md` from the run that just happened, which is the
 only way numbers get into that file.
+
+Every eval run also leaves an immutable JSON record in `evals/runs/` (see
+`aisec/runlog.py`), whether or not `--report` was passed: `RESULTS.md` is a single
+slot that each report truncates, so the archive is what keeps a run's evidence
+after the next run replaces the view of it. Because of that, `--report` on its
+*default* path refuses a filtered or capped run rather than quietly publishing a
+subset's numbers as the suite's.
 """
 
 from __future__ import annotations
@@ -17,11 +24,14 @@ from __future__ import annotations
 import argparse
 import pathlib
 import sys
+from datetime import datetime, timezone
 
 import httpx
 
 
 DEFAULT_BASE_URL = "http://127.0.0.1:5001"
+DEFAULT_REPORT_PATH = "evals/RESULTS.md"
+DEFAULT_ARCHIVE_DIR = "evals/runs"
 
 
 def _health_ok(base_url: str) -> bool:
@@ -135,7 +145,14 @@ def _print_report(report, emitted: dict[int, str] | None = None) -> None:
 
 
 def cmd_eval(args: argparse.Namespace) -> int:
-    from aisec.evalsuite import format_markdown, format_table, load_cases, run_suite
+    from aisec.evalsuite import (
+        as_record,
+        format_markdown,
+        format_table,
+        load_cases,
+        run_suite,
+    )
+    from aisec.runlog import ledger, load_records, write_record
 
     try:
         cases = load_cases(args.cases)
@@ -187,6 +204,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
         )
 
     print(f"running {len(cases)} eval case(s) against {base_url}...", flush=True)
+    started_at = datetime.now(timezone.utc).isoformat()
     suite = run_suite(
         cases,
         source_root=args.target,
@@ -196,13 +214,52 @@ def cmd_eval(args: argparse.Namespace) -> int:
     )
 
     print()
-    print(format_table(suite), end="")
+    print(format_table(suite), end="", flush=True)
+
+    # A run that spent money leaves evidence whether or not `--report` was asked
+    # for. The archive is append-only, so this can never destroy a prior run.
+    filtered = {k: v for k, v in (("case", args.case), ("kind", args.kind)) if v} or None
+    record = as_record(
+        suite,
+        case_filter=filtered,
+        started_at=started_at,
+        finished_at=datetime.now(timezone.utc).isoformat(),
+    )
+    archived: pathlib.Path | None = None
+    try:
+        archived = write_record(record, args.archive_dir)
+        print(f"\narchived run to {archived}")
+    except OSError as exc:
+        print(f"\ncould not archive this run: {exc}", file=sys.stderr)
 
     if args.report:
         report_path = pathlib.Path(args.report)
-        report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(format_markdown(suite), encoding="utf-8")
-        print(f"\nwrote {report_path}")
+        default_report = args.report == DEFAULT_REPORT_PATH
+        # `--case`/`--kind` filtering happens above, before this write. Letting a
+        # filtered or capped run land on the default path would replace the
+        # suite's numbers with a subset's while the file still claimed to be the
+        # suite. An explicit `--report PATH` is the user's call and still writes.
+        refusal = None
+        if default_report and filtered:
+            refusal = "this run was filtered, so its numbers are not the suite's"
+        elif default_report and suite.metrics()["partial_scans"]:
+            refusal = "this run has scan(s) that stopped on a cap"
+        if refusal:
+            print(
+                f"not writing {report_path}: {refusal}.\n"
+                f"the full record is in {archived or 'the archive'}; pass an explicit "
+                f"--report PATH to write it anyway.",
+                file=sys.stderr,
+            )
+        else:
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            report_path.write_text(
+                format_markdown(
+                    suite, record=record, spend=ledger(load_records(args.archive_dir))
+                ),
+                encoding="utf-8",
+            )
+            print(f"wrote {report_path}")
 
     return 0 if suite.metrics()["failed"] == 0 else 1
 
@@ -271,10 +328,15 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument(
         "--report",
         nargs="?",
-        const="evals/RESULTS.md",
+        const=DEFAULT_REPORT_PATH,
         default=None,
         help="write markdown results to PATH (default evals/RESULTS.md); "
         "omit the flag and no file is touched",
+    )
+    eval_parser.add_argument(
+        "--archive-dir",
+        default=DEFAULT_ARCHIVE_DIR,
+        help=f"append-only run archive (default {DEFAULT_ARCHIVE_DIR})",
     )
     eval_parser.set_defaults(func=cmd_eval)
 
