@@ -183,6 +183,34 @@ the internet, or into reaching the callback listener itself.
   so a traversal verdict can only come from the target actually leaking the file. That
   check lives in the tool layer on purpose: putting it in the oracle would mean making the
   oracle stateful enough to tell "read it" from "planted it there first".
+- *The harness closes the window, and the model never can.* One hypothesis gets one attack
+  window: the loop opens it (`sandbox.mark()`) when the model submits, runs the oracle over
+  exactly that window's trace when the model submits the *next* one, and closes the final
+  window at loop end. There is deliberately no "run the oracle" tool — the model can attack
+  but cannot invoke the trust boundary, so a verdict is something that happens *to* its
+  attack, not something it requests. The oracle's result is then fed back to the model as
+  harness-authored text it did not write, which is the only honest way to let it stop
+  re-attacking a bug it already proved.
+- *A manual tool loop, not the SDK's `tool_runner`.* The window bookkeeping, the per-turn
+  fencing, and the turn/dollar/request caps all live *between* the model's tool call and the
+  next request — exactly the seam an autorunner hides. Owning the loop is what makes hitting
+  a cap a partial `ScanReport` instead of a truncated answer.
+- *Fencing is labeling; the real defense is structural.* Tool results are wrapped in a
+  per-scan random fence and the system prompt says everything inside is data. But a
+  `tool_result` is already its own API content block — it cannot concatenate into the system
+  prompt — and, more to the point, injection bait has no path to an oracle. The fence is
+  honest signposting on top of the fact that a fooled model still can't close a finding. I
+  resisted claiming "prompt-injection-proof"; the claim is "injection can't manufacture a
+  verdict", which is the one that's actually true.
+- *Injection attempts are logged, never gated on.* `_detect_injection` records that bait was
+  seen and does nothing else — a test asserts a scan that trips the bait still verifies the
+  real bug. A detector that could suppress a finding would be a model-opinion verdict wearing
+  a regex costume.
+- *The cost meter is real, and it lives in `router.py`.* Measurement (tokens, cache
+  read/write factors, dollars per model) is a `CostMeter` phase 5 will grow routing around;
+  the *decision to stop* on the dollar cap is loop policy in `agent.py`. The counters are
+  read off the SDK usage object, never estimated — the README's `$250` line will be filled
+  from them.
 
 **Rejected**
 - Model-as-judge verdicts (the failure mode this tool exists to fix).
@@ -191,6 +219,11 @@ the internet, or into reaching the callback listener itself.
 - A generic "scan any repo" promise. It works on the shipped target; honest scope.
 - Treating a canary echoed in a 4xx/5xx error body as traversal. Arguably a real leak, but
   an error page isn't a successful file read — and precision is the whole claim.
+- The SDK's beta `tool_runner`. It would have written the loop for us, but it hides the exact
+  seam — post-tool-call, pre-next-request — where the window and the caps have to act.
+- A "confidence" or "exploitability" field on the hypothesis, and any injection detector that
+  could veto a finding. Both are model opinion smuggled back into the verdict path; the whole
+  design is a wall against exactly that.
 
 **Where the AI led me astray**
 
@@ -213,7 +246,16 @@ channels is only as scoped as the *less* scoped one.
 > deterministic oracles in the first place.)*
 
 **The $250**
-> *(actual spend by phase and model, from the run counters, before submission)*
+
+*Development spend so far: $0.* Phases 2–4 are all tested offline. The agent loop's
+19 tests drive the real target, callback listener, tools, and oracles through a *scripted*
+model client (`tests/agent/test_agent_loop.py`) — the loop's plumbing is exercised without a
+single API call. That's deliberate cost discipline, not an accident: the expensive thing in
+a tool loop is the model, so everything that can be proven against a fake one is.
+
+> *(the first real `aisec scan` — the live-model run — is the phase gate for the numbers that
+> go here: actual spend by phase and model, read from `CostMeter`, never estimated. It needs
+> `anthropic` installed and `ANTHROPIC_API_KEY` in the environment, and hasn't been run yet.)*
 
 ## What I'd build next
 
