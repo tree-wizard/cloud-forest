@@ -193,7 +193,6 @@ Requires the target to be running. Override the host with AISEC_TARGET_URL.
 from __future__ import annotations
 
 import os
-import pathlib
 import time
 
 import httpx
@@ -258,6 +257,8 @@ VERDICT = _verdict()
 
 ''',
     "traversal": '''\
+import pathlib
+
 CANARY_FILE = pathlib.Path(os.environ.get("AISEC_CANARY_FILE", {canary_file}))
 
 

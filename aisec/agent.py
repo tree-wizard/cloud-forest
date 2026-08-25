@@ -40,7 +40,12 @@ from aisec.tools import TOOL_SCHEMAS, Hypothesis, Sandbox, dispatch
 DEFAULT_MODEL = "claude-sonnet-5"
 DEFAULT_MAX_TURNS = 24
 DEFAULT_BUDGET_USD = 5.0
-DEFAULT_MAX_TOKENS = 4096
+# A tool-loop turn that hits this cap is a stopped scan, not a truncated
+# sentence: `stop_reason` comes back "max_tokens" instead of "tool_use" and the
+# loop ends with whatever it had. The first live run after prompt caching landed
+# lost its third hypothesis exactly that way. 4096 was a guess; this is not
+# latency-sensitive and unused headroom costs nothing.
+DEFAULT_MAX_TOKENS = 16000
 EXCERPT_CHARS = 200
 
 
@@ -416,7 +421,11 @@ them):
   send it) and you never see it (model-facing text is scrubbed). You must make the
   TARGET leak it out of a file it should not serve.
 - SSRF: the target contacting the callback listener via a request YOU directed at
-  the target — the {{CALLBACK_URL}} token in a field the target will fetch.
+  the target — the {{CALLBACK_URL}} token in a field the target will fetch. An SSRF
+  attack that sends any other URL (169.254.169.254, example.com, a port scan) is
+  unobservable: nothing reaches the listener, so the oracle sees nothing and the
+  hypothesis is REJECTED no matter how the target behaves. Every SSRF attack you
+  run must carry the {{CALLBACK_URL}} token.
 
 Budget: you have a limited number of turns and requests. Triage the likely files
 first; do not brute force. When you have tested the hypotheses worth testing, stop."""
