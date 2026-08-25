@@ -78,7 +78,11 @@ The $250 is a graded dimension, not just a limit.
 - Every run records requests, input/output tokens, and dollars. Those counters feed the
   README — they must be real, never hardcoded or estimated.
 - While iterating, run against cached fixtures or cheap models. Save full runs for the
-  numbers that get published. Live spend to date: $2.30 of $250, over six runs.
+  numbers that get published.
+- Spend is counted, not remembered: every `aisec eval` run archives a JSON record to
+  `evals/runs/`, and the cumulative figure in `evals/RESULTS.md` is summed from those
+  files. The archive begins after the first six live runs ($2.30 of $250), which are
+  recorded only as `.txt` transcripts and are deliberately not backfilled.
 
 ## Reliability expectations
 
