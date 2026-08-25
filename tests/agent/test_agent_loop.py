@@ -396,3 +396,48 @@ def test_agent_module_imports_without_anthropic():
     sys.modules.pop("aisec.agent", None)
     importlib.import_module("aisec.agent")
     assert "anthropic" not in sys.modules
+
+
+# -- prompt caching --------------------------------------------------------
+
+
+def cache_breakpoints(messages):
+    """Every cache_control marker in the messages we control (dicts, not SDK blocks)."""
+    found = []
+    for index, message in enumerate(messages):
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if isinstance(block, dict) and "cache_control" in block:
+                found.append((index, block.get("tool_use_id")))
+    return found
+
+
+def test_cache_breakpoint_rolls_forward_to_the_newest_tool_result(sandbox):
+    """The transcript is re-sent every turn, so the cache has to follow it."""
+    steps = [
+        resp([tool_block("read_file", {"path": "routes/notes.py"}, id=f"r{i}")], "tool_use")
+        for i in range(4)
+    ]
+    _, client = _scan(sandbox, steps, max_turns=4)
+
+    for call in client.calls[1:]:
+        marks = cache_breakpoints(call["messages"])
+        # Exactly one, and it is on the last block of the most recent user turn.
+        assert len(marks) == 1, marks
+        message_index, tool_use_id = marks[0]
+        last_user = max(
+            i
+            for i, m in enumerate(call["messages"])
+            if isinstance(m.get("content"), list)
+            and any(isinstance(b, dict) for b in m["content"])
+        )
+        assert message_index == last_user
+        assert tool_use_id == call["messages"][last_user]["content"][-1]["tool_use_id"]
+
+    # System carries one too; four per request is the API's ceiling.
+    system_marks = sum(
+        1 for block in client.calls[-1]["system"] if "cache_control" in block
+    )
+    assert system_marks + 1 <= 4

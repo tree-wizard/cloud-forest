@@ -209,6 +209,7 @@ def run_scan(
                 }
             )
 
+        _roll_cache_breakpoint(messages, tool_results)
         messages.append({"role": "user", "content": tool_results})
 
         if meter.dollars() >= budget_usd:
@@ -278,6 +279,37 @@ def _default_client() -> Any:
     import anthropic
 
     return anthropic.Anthropic()
+
+
+# --------------------------------------------------------------------------
+# prompt caching
+# --------------------------------------------------------------------------
+
+
+def _roll_cache_breakpoint(messages: list[dict], tool_results: list[dict]) -> None:
+    """Move the conversation's cache breakpoint to the newest tool result.
+
+    A tool loop re-sends its whole history every turn, so with only the system
+    block cached the transcript is billed at full rate again and again — the
+    first live scan spent 130,053 input tokens against 30,195 cache reads over
+    12 turns. Marking the last block of each new user turn means the next
+    request's prefix ends exactly where the cache does, and everything before it
+    reads at a tenth of the price.
+
+    The old breakpoint is stripped as the new one is set: the API allows four per
+    request, and a loop that only ever added them would eventually be rejected.
+    Stripping is safe because the newer prefix strictly contains the older one.
+    """
+    if not tool_results:
+        return
+    for message in messages:
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if isinstance(block, dict):
+                block.pop("cache_control", None)
+    tool_results[-1]["cache_control"] = {"type": "ephemeral"}
 
 
 # --------------------------------------------------------------------------

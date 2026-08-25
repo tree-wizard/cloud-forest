@@ -33,6 +33,7 @@ from aisec.evalsuite import (
     run_suite,
 )
 from aisec.oracles import Verdict
+from aisec.router import price_for
 from aisec.tools import Hypothesis, Sandbox
 
 
@@ -472,8 +473,14 @@ def test_suite_cost_is_measured_from_usage(three_case_suite):
     # 120 in / 40 out per scripted response, and the meter counted every one.
     assert metrics["usage"]["requests"] > 0
     assert usage_totals["input_tokens"] == 120 * metrics["usage"]["requests"]
+    # Priced at the rate really in force for the model on the day of the run,
+    # which is not always the list rate — see router.INTRO_PRICES.
+    per_input, per_output = price_for(
+        three_case_suite.model, three_case_suite.meter.priced_on
+    )
     assert metrics["cost_usd"] == pytest.approx(
-        usage_totals["input_tokens"] * 3.00e-6 + usage_totals["output_tokens"] * 15.00e-6
+        usage_totals["input_tokens"] * per_input
+        + usage_totals["output_tokens"] * per_output
     )
     # Per-case costs are a partition of the suite total, not a re-estimate.
     assert sum(r.cost_usd for r in three_case_suite.results) == pytest.approx(
